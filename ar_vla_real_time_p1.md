@@ -7,6 +7,7 @@ citation_authors:
   - "Oleg Balakhnov"
   - "Sergei Skvortsov"
 citation_date: "2026/05/20"
+math: true
 
 ---
 
@@ -32,7 +33,8 @@ This post is our attempt to answer that question concretely. We set a measurable
 ">
   Keep the delay between receiving a camera image and sending an action to the motors below 100 ms, on a 6-DoF arm with a 1-DoF gripper.
 </div>
- And we treated it as a systems problem rather than a modeling one - keeping the same VLM backbone and actions-as-text representation throughout.
+
+And we treated it as a systems problem rather than a modeling one - keeping the same VLM backbone and actions-as-text representation throughout.
 
 Two changes got us close. 
 - Streaming actions out of the model as they are generated, rather than waiting for a full chunk to be decoded before the robot moves.
@@ -43,7 +45,9 @@ The takeaway is that the bottleneck was never the actions-as-text idea itself. I
 # Baseline: Blocking Autoregressive VLA Control
 
 Our baseline policy follows the VLA-0-Smol setup: a standard vision–language model is fine-tuned to output robot actions as ordinary text tokens. Instead of adding a continuous action head or a robotics-specific decoder, we express each action as a short sequence of discrete numbers in the model’s text vocabulary. The policy is therefore trained exactly like a language model: given an image, task description, and robot state, predict the next action token.
-The target model is based on SmolVLM2, a compact vision–language model with an image encoder and an autoregressive language-model decoder. During training, the camera observation is inserted into the prompt as image tokens, while the task, robot state, and action prefix are represented as text. The target output is a sequence of action tokens corresponding to the next robot command, or to a short chunk of future commands.
+
+The target model is based on **SmolVLM2**, a compact vision–language model with an image encoder and an autoregressive language-model decoder. During training, the camera observation is inserted into the prompt as image tokens, while the task, robot state, and action prefix are represented as text. The target output is a sequence of action tokens corresponding to the next robot command, or to a short chunk of future commands.
+
 The sequence looks like this:
 
 <div style="font-family: 'SF Mono', Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace; background: #ffffff; padding: 24px; border-radius: 12px; border: 1px solid #e2e8f0; overflow-x: auto; line-height: 2.4; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
@@ -66,19 +70,40 @@ The sequence looks like this:
 
 The important detail for this post is that the action sequence is generated autoregressively. The model does not predict the full action sequence in one forward pass. Instead, it predicts one token, appends it to the context, predicts the next token, and repeats this process until the whole action chunk has been produced.
 The naïve control loop therefore looks like this:
-receive a new camera observation and robot state;
-build the VLM prompt;
-run the model prefill on the image and text context;
-autoregressively decode the full action chunk;
-parse the generated tokens into robot actions;
-execute the action chunk on the robot;
-repeat.
+
+```text
+Algorithm 1: Naïve autoregressive VLA control loop
+
+while the robot is running do
+    Receive a new camera observation and the current robot state.
+    Build the VLM prompt.
+    Run the model prefill on the image and text context.
+    Decode the full action chunk autoregressively.
+    Parse the generated tokens into robot actions.
+    Execute the action chunk on the robot.
+end while
+```
+
 This is the simplest way to run an autoregressive VLA policy, but it is also the most blocking one. The robot does not start moving until the full chunk has been decoded. If generation takes hundreds of milliseconds, the robot simply waits during that time. This creates visible pauses and makes the policy unsuitable for high-frequency control.
+
 This problem becomes worse when we predict action chunks. Chunking is useful because it lets the policy generate several future actions from one observation, which can make behaviour smoother and more stable. But in an autoregressive text-token setup, predicting a longer chunk also means generating more tokens sequentially. For example, if one action contains several discretised values and we predict multiple future actions, the model may need many decoding steps before the robot receives anything.
+
 In the previous VLA-0-Smol work, we also used temporal ensembling, which improved task performance. However, temporal ensembling is expensive in this setting because it requires repeatedly predicting overlapping future trajectories. Since the focus of this post is real-time control, we do not use temporal ensembling in the main runtime setup. We still report it as a reference point in the results, but our main baseline is the plain autoregressive policy without temporal ensembling.
-With this blocking implementation, the latency is far above our target:
-Time to generate a full action sequence with a chunk of 8 actions for a 7-DoF robot is 3625 ms.
-Our target is to keep the delay between receiving a camera image and sending an action to the motors below 100 ms. The baseline policy is strong, but the naïve execution loop is too slow by a large margin.
+
+With this blocking implementation, latency is far above our target. 
+
+<div style="
+  background: rgba(59,130,246,0.08);
+  border-left: 6px solid #3b82f6;
+  padding: 16px 20px;
+  margin: 24px 0;
+  border-radius: 8px;
+">
+  Generating a full action sequence of 8 actions for a 7-DoF robot takes 3625 ms, while our target is to keep the delay between receiving a camera image and sending an action to the motors below 100 ms. 
+</div>
+
+The policy itself is strong, but the naïve execution loop is too slow by more than an order of magnitude.
+
 This gives us a clean systems problem: keep the same target VLA policy and the same actions-as-text representation, but change how inference is scheduled and accelerated. The next sections describe two steps in that direction: first, overlapping inference with robot control, and second, using speculative decoding to reduce the cost of autoregressive generation.
 
 # Parallel Inference and Control
@@ -86,9 +111,13 @@ This gives us a clean systems problem: keep the same target VLA policy and the s
 ## Method
 
 The blocking baseline wastes a lot of time because inference and execution happen sequentially. The model first generates a full action chunk,
-At=[at,at+1,...,at+H−1],At​=[at​,at+1​,...,at+H−1​],
+
+\\[
+A_t = [a_t, a_{t+1}, \ldots, a_{t+H-1}],
+\\]
+
 and only after the whole chunk has been decoded does the robot start executing it.
-This is inefficient for an autoregressive policy. The model produces the action sequence token by token, and in our representation each robot action is available before the full chunk is finished. In other words, once the tokens for atat​ have been generated and parsed, we already know the next action that should be sent to the robot. We do not need to wait for at+1,...,at+H−1at+1​,...,at+H−1​.
+This is inefficient for an autoregressive policy. The model produces the action sequence token by token, and in our representation each robot action is available before the full chunk is finished. In other words, once the tokens for \\(a_t\\) have been generated and parsed, we already know the next action that should be sent to the robot. We do not need to wait for \\(a_{t+1}, \ldots, a_{t+H-1}\\).
 The simplest improvement is therefore to overlap decoding and execution. Instead of treating the action chunk as something that must be fully generated before control starts, we treat it as a stream of actions.
 In our implementation, the system is split into two parallel loops:
 Inference loop:
