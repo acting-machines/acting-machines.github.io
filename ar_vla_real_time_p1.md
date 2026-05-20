@@ -71,18 +71,18 @@ The sequence looks like this:
 The important detail for this post is that the action sequence is generated autoregressively. The model does not predict the full action sequence in one forward pass. Instead, it predicts one token, appends it to the context, predicts the next token, and repeats this process until the whole action chunk has been produced.
 The naïve control loop therefore looks like this:
 
-```text
-Algorithm 1: Naïve autoregressive VLA control loop
-
-while the robot is running do
-    Receive a new camera observation and the current robot state.
-    Build the VLM prompt.
-    Run the model prefill on the image and text context.
-    Decode the full action chunk autoregressively.
-    Parse the generated tokens into robot actions.
-    Execute the action chunk on the robot.
-end while
-```
+<div class="algorithm-box">
+  <div class="algorithm-title">Algorithm 1: Naïve autoregressive VLA control loop</div>
+  <p class="algorithm-note">Repeat while the robot is running:</p>
+  <ol>
+    <li>Receive a new camera observation and the current robot state.</li>
+    <li>Build the VLM prompt.</li>
+    <li>Run the model prefill on the image and text context.</li>
+    <li>Decode the full action chunk autoregressively.</li>
+    <li>Parse the generated tokens into robot actions.</li>
+    <li>Execute the action chunk on the robot.</li>
+  </ol>
+</div>
 
 This is the simplest way to run an autoregressive VLA policy, but it is also the most blocking one. The robot does not start moving until the full chunk has been decoded. If generation takes hundreds of milliseconds, the robot simply waits during that time. This creates visible pauses and makes the policy unsuitable for high-frequency control.
 
@@ -120,18 +120,31 @@ and only after the whole chunk has been decoded does the robot start executing i
 This is inefficient for an autoregressive policy. The model produces the action sequence token by token, and in our representation each robot action is available before the full chunk is finished. In other words, once the tokens for \\(a_t\\) have been generated and parsed, we already know the next action that should be sent to the robot. We do not need to wait for \\(a_{t+1}, \ldots, a_{t+H-1}\\).
 The simplest improvement is therefore to overlap decoding and execution. Instead of treating the action chunk as something that must be fully generated before control starts, we treat it as a stream of actions.
 In our implementation, the system is split into two parallel loops:
-Inference loop:
-observe image/state
-run VLM prefill
-until EOS token:
-generate one action autoregressively
-push action into action buffer
 
-Control loop (run at fixed control rate)
-read next action from action buffer
-send action to robot
+<div class="algorithm-box">
+  <div class="algorithm-title">Algorithm 2: Parallel inference and control</div>
+  <p class="algorithm-note">Run the following loops in parallel:</p>
+  <div class="algorithm-grid">
+    <div>
+      <div class="algorithm-subtitle">Inference loop</div>
+      <ol>
+        <li>Observe the camera image and current robot state.</li>
+        <li>Run the VLM prefill.</li>
+        <li>Generate actions autoregressively until the EOS token is produced.</li>
+        <li>Push each generated action into the action buffer.</li>
+      </ol>
+    </div>
+    <div>
+      <div class="algorithm-subtitle">Control loop</div>
+      <ol>
+        <li>Run at the fixed robot control rate.</li>
+        <li>Read the next action from the action buffer.</li>
+        <li>Send the action to the robot.</li>
+      </ol>
+    </div>
+  </div>
+</div>
 
-TODO: Add picture
 The action buffer is the only communication point between the two loops. The inference loop continuously produces actions and pushes them into the buffer. The control loop runs at the desired control frequency, for example 10 Hz, and consumes one action at a time.
 This does not make the model itself faster. The total compute required to generate the full chunk is unchanged. However, it changes what the robot is waiting for. In the blocking baseline, the robot waits for the whole chunk. With parallel inference and control, the robot only needs to wait for the first executable action.
 For a chunk of H actions, this can be a large improvement. In our setup, the chunk contains 8 actions, so overlapping inference and control can reduce the initial waiting time by roughly the chunk size, assuming actions are generated at a similar rate.
