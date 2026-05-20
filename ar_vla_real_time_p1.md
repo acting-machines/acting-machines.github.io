@@ -160,26 +160,26 @@ The key point is that this optimisation is almost free. It does not require chan
 With the blocking autoregressive baseline, we measured:
 
 <div style="margin: 24px 0; overflow-x: auto;">
-  <table style="width: auto; min-width: 520px; border-collapse: collapse; background: #ffffff; border: 1px solid #d1d5db;">
+  <table style="display: inline-table; width: auto; min-width: 520px; border-collapse: collapse; background: #ffffff; border: 0;">
     <caption style="caption-side: bottom; padding-top: 8px; color: #4b5563; font-size: 0.9rem; text-align: left;">Table 1: Autoregressive baseline latency.</caption>
     <thead>
       <tr style="background: #f3f4f6;">
-        <th style="text-align: left; padding: 12px 14px; color: #111827; font-size: 0.9rem; font-weight: 700; border-bottom: 1px solid #d1d5db;">Measurement</th>
-        <th style="text-align: right; padding: 12px 14px; color: #111827; font-size: 0.9rem; font-weight: 700; border-bottom: 1px solid #d1d5db;">Latency (ms)</th>
+        <th style="text-align: left; padding: 12px 14px; color: #111827; font-size: 0.9rem; font-weight: 700; border: 0; border-bottom: 1px solid #d1d5db;">Measurement</th>
+        <th style="text-align: right; padding: 12px 14px; color: #111827; font-size: 0.9rem; font-weight: 700; border: 0; border-bottom: 1px solid #d1d5db;">Latency (ms)</th>
       </tr>
     </thead>
     <tbody>
       <tr>
-        <td style="padding: 12px 14px; border-bottom: 1px solid #e5e7eb; color: #111827;">Full action chunk</td>
-        <td style="padding: 12px 14px; border-bottom: 1px solid #e5e7eb; color: #111827; text-align: right; font-variant-numeric: tabular-nums;">3625</td>
+        <td style="padding: 12px 14px; border: 0; border-bottom: 1px solid #e5e7eb; color: #111827;">Full action chunk</td>
+        <td style="padding: 12px 14px; border: 0; border-bottom: 1px solid #e5e7eb; color: #111827; text-align: right; font-variant-numeric: tabular-nums;">3625</td>
       </tr>
       <tr>
-        <td style="padding: 12px 14px; border-bottom: 1px solid #e5e7eb; color: #111827;">First executable action</td>
-        <td style="padding: 12px 14px; border-bottom: 1px solid #e5e7eb; color: #111827; text-align: right; font-variant-numeric: tabular-nums;">489</td>
+        <td style="padding: 12px 14px; border: 0; border-bottom: 1px solid #e5e7eb; color: #111827;">First executable action</td>
+        <td style="padding: 12px 14px; border: 0; border-bottom: 1px solid #e5e7eb; color: #111827; text-align: right; font-variant-numeric: tabular-nums;">489</td>
       </tr>
       <tr>
-        <td style="padding: 12px 14px; color: #111827;">Later actions</td>
-        <td style="padding: 12px 14px; color: #111827; text-align: right; font-variant-numeric: tabular-nums;">448</td>
+        <td style="padding: 12px 14px; border: 0; color: #111827;">Later actions</td>
+        <td style="padding: 12px 14px; border: 0; color: #111827; text-align: right; font-variant-numeric: tabular-nums;">448</td>
       </tr>
     </tbody>
   </table>
@@ -272,25 +272,25 @@ Training ran for 100k steps on the LIBERO dataset with batch size 192, learning 
 We measured latency on an H100 GPU [[6]](https://resources.nvidia.com/en-us-gpu-resources/h100-datasheet-24306).
 
 <div style="margin: 24px 0; overflow-x: auto;">
-  <table style="width: auto; min-width: 760px; border-collapse: collapse; background: #ffffff; border: 1px solid #d1d5db;">
+  <table style="display: inline-table; width: auto; min-width: 760px; border-collapse: collapse; background: #ffffff; border: 0;">
     <caption style="caption-side: bottom; padding-top: 8px; color: #4b5563; font-size: 0.9rem; text-align: left;">Table 2: Decoder latency comparison.</caption>
     <thead>
       <tr style="background: #f3f4f6;">
-        <th style="text-align: left; padding: 12px 14px; color: #111827; font-size: 0.9rem; font-weight: 700; border-bottom: 1px solid #d1d5db;">Decoder</th>
-        <th style="text-align: right; padding: 12px 14px; color: #111827; font-size: 0.9rem; font-weight: 700; border-bottom: 1px solid #d1d5db;">First action (ms)</th>
-        <th style="text-align: right; padding: 12px 14px; color: #111827; font-size: 0.9rem; font-weight: 700; border-bottom: 1px solid #d1d5db;">Later actions (ms)</th>
+        <th style="text-align: left; padding: 12px 14px; color: #111827; font-size: 0.9rem; font-weight: 700; border: 0; border-bottom: 1px solid #d1d5db;">Decoder</th>
+        <th style="text-align: right; padding: 12px 14px; color: #111827; font-size: 0.9rem; font-weight: 700; border: 0; border-bottom: 1px solid #d1d5db;">First action (ms)</th>
+        <th style="text-align: right; padding: 12px 14px; color: #111827; font-size: 0.9rem; font-weight: 700; border: 0; border-bottom: 1px solid #d1d5db;">Later actions (ms)</th>
       </tr>
     </thead>
     <tbody>
       <tr>
-        <td style="padding: 12px 14px; border-bottom: 1px solid #e5e7eb; color: #111827;">Autoregressive baseline</td>
-        <td style="padding: 12px 14px; border-bottom: 1px solid #e5e7eb; color: #111827; text-align: right; font-variant-numeric: tabular-nums;">489</td>
-        <td style="padding: 12px 14px; border-bottom: 1px solid #e5e7eb; color: #111827; text-align: right; font-variant-numeric: tabular-nums;">448</td>
+        <td style="padding: 12px 14px; border: 0; border-bottom: 1px solid #e5e7eb; color: #111827;">Autoregressive baseline</td>
+        <td style="padding: 12px 14px; border: 0; border-bottom: 1px solid #e5e7eb; color: #111827; text-align: right; font-variant-numeric: tabular-nums;">489</td>
+        <td style="padding: 12px 14px; border: 0; border-bottom: 1px solid #e5e7eb; color: #111827; text-align: right; font-variant-numeric: tabular-nums;">448</td>
       </tr>
       <tr>
-        <td style="padding: 12px 14px; color: #111827;">EAGLE-style, 5 heads, unverified</td>
-        <td style="padding: 12px 14px; color: #111827; text-align: right; font-variant-numeric: tabular-nums;">154</td>
-        <td style="padding: 12px 14px; color: #111827; text-align: right; font-variant-numeric: tabular-nums;">106</td>
+        <td style="padding: 12px 14px; border: 0; color: #111827;">EAGLE-style, 5 heads, unverified</td>
+        <td style="padding: 12px 14px; border: 0; color: #111827; text-align: right; font-variant-numeric: tabular-nums;">154</td>
+        <td style="padding: 12px 14px; border: 0; color: #111827; text-align: right; font-variant-numeric: tabular-nums;">106</td>
       </tr>
     </tbody>
   </table>
@@ -304,35 +304,35 @@ That is still slightly above the 100 ms target, but it is much closer. More impo
 The main risk of skipping verification is that speed comes at the cost of policy quality. To check this, we evaluated all variants on two LIBERO benchmarks.
 
 <div style="margin: 24px 0; overflow-x: auto;">
-  <table style="width: auto; min-width: 720px; border-collapse: collapse; background: #ffffff; border: 1px solid #d1d5db;">
+  <table style="display: inline-table; width: auto; min-width: 720px; border-collapse: collapse; background: #ffffff; border: 0;">
     <caption style="caption-side: bottom; padding-top: 8px; color: #4b5563; font-size: 0.9rem; text-align: left;">Table 3: LIBERO task performance.</caption>
     <thead>
       <tr style="background: #f3f4f6;">
-        <th style="text-align: left; padding: 12px 14px; color: #111827; font-size: 0.9rem; font-weight: 700; border-bottom: 1px solid #d1d5db;">Model</th>
-        <th style="text-align: right; padding: 12px 14px; color: #111827; font-size: 0.9rem; font-weight: 700; border-bottom: 1px solid #d1d5db;">LIBERO-Goal</th>
-        <th style="text-align: right; padding: 12px 14px; color: #111827; font-size: 0.9rem; font-weight: 700; border-bottom: 1px solid #d1d5db;">LIBERO-Long</th>
+        <th style="text-align: left; padding: 12px 14px; color: #111827; font-size: 0.9rem; font-weight: 700; border: 0; border-bottom: 1px solid #d1d5db;">Model</th>
+        <th style="text-align: right; padding: 12px 14px; color: #111827; font-size: 0.9rem; font-weight: 700; border: 0; border-bottom: 1px solid #d1d5db;">LIBERO-Goal</th>
+        <th style="text-align: right; padding: 12px 14px; color: #111827; font-size: 0.9rem; font-weight: 700; border: 0; border-bottom: 1px solid #d1d5db;">LIBERO-Long</th>
       </tr>
     </thead>
     <tbody>
       <tr>
-        <td style="padding: 12px 14px; border-bottom: 1px solid #e5e7eb; color: #111827;">Autoregressive baseline</td>
-        <td style="padding: 12px 14px; border-bottom: 1px solid #e5e7eb; color: #111827; text-align: right; font-variant-numeric: tabular-nums;">91.6</td>
-        <td style="padding: 12px 14px; border-bottom: 1px solid #e5e7eb; color: #111827; text-align: right; font-variant-numeric: tabular-nums;">88.2</td>
+        <td style="padding: 12px 14px; border: 0; border-bottom: 1px solid #e5e7eb; color: #111827;">Autoregressive baseline</td>
+        <td style="padding: 12px 14px; border: 0; border-bottom: 1px solid #e5e7eb; color: #111827; text-align: right; font-variant-numeric: tabular-nums;">91.6</td>
+        <td style="padding: 12px 14px; border: 0; border-bottom: 1px solid #e5e7eb; color: #111827; text-align: right; font-variant-numeric: tabular-nums;">88.2</td>
       </tr>
       <tr>
-        <td style="padding: 12px 14px; border-bottom: 1px solid #e5e7eb; color: #111827;">Baseline + temporal ensembling</td>
-        <td style="padding: 12px 14px; border-bottom: 1px solid #e5e7eb; color: #111827; text-align: right; font-variant-numeric: tabular-nums;">95.6</td>
-        <td style="padding: 12px 14px; border-bottom: 1px solid #e5e7eb; color: #111827; text-align: right; font-variant-numeric: tabular-nums;">91.2</td>
+        <td style="padding: 12px 14px; border: 0; border-bottom: 1px solid #e5e7eb; color: #111827;">Baseline + temporal ensembling</td>
+        <td style="padding: 12px 14px; border: 0; border-bottom: 1px solid #e5e7eb; color: #111827; text-align: right; font-variant-numeric: tabular-nums;">95.6</td>
+        <td style="padding: 12px 14px; border: 0; border-bottom: 1px solid #e5e7eb; color: #111827; text-align: right; font-variant-numeric: tabular-nums;">91.2</td>
       </tr>
       <tr>
-        <td style="padding: 12px 14px; border-bottom: 1px solid #e5e7eb; color: #111827;">EAGLE-style, unverified</td>
-        <td style="padding: 12px 14px; border-bottom: 1px solid #e5e7eb; color: #111827; text-align: right; font-variant-numeric: tabular-nums;">94.8</td>
-        <td style="padding: 12px 14px; border-bottom: 1px solid #e5e7eb; color: #111827; text-align: right; font-variant-numeric: tabular-nums;">88.4</td>
+        <td style="padding: 12px 14px; border: 0; border-bottom: 1px solid #e5e7eb; color: #111827;">EAGLE-style, unverified</td>
+        <td style="padding: 12px 14px; border: 0; border-bottom: 1px solid #e5e7eb; color: #111827; text-align: right; font-variant-numeric: tabular-nums;">94.8</td>
+        <td style="padding: 12px 14px; border: 0; border-bottom: 1px solid #e5e7eb; color: #111827; text-align: right; font-variant-numeric: tabular-nums;">88.4</td>
       </tr>
       <tr>
-        <td style="padding: 12px 14px; color: #111827;">Target model only</td>
-        <td style="padding: 12px 14px; color: #111827; text-align: right; font-variant-numeric: tabular-nums;">93.2</td>
-        <td style="padding: 12px 14px; color: #111827; text-align: right; font-variant-numeric: tabular-nums;">88.8</td>
+        <td style="padding: 12px 14px; border: 0; color: #111827;">Target model only</td>
+        <td style="padding: 12px 14px; border: 0; color: #111827; text-align: right; font-variant-numeric: tabular-nums;">93.2</td>
+        <td style="padding: 12px 14px; border: 0; color: #111827; text-align: right; font-variant-numeric: tabular-nums;">88.8</td>
       </tr>
     </tbody>
   </table>

@@ -4,8 +4,6 @@ title: ACTING-MACHINES
 description: Robotics research blog
 ---
 
-bla bla bla
-
 
 # Our projects
 
