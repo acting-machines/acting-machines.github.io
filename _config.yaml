@@ -1,0 +1,8 @@
+title: ACTING-MACHINES
+description: bla bla bla
+remote_theme: pages-themes/cayman
+plugins:
+  - jekyll-remote-theme
+markdown: kramdown
+github:
+  is_project_page: false
