@@ -13,16 +13,31 @@ citation_date: "2026/05/20"
 # Introduction
 
 Robots need to react fast. A policy that takes three seconds to decide what to do next is not a policy you can deploy on a real arm. This creates an obvious tension with large vision-language models: they are powerful, general, and increasingly capable of understanding and acting in the world - but autoregressive decoding is slow by nature.
+
 In our previous work, VLA-0-Smol, we showed that a standard VLM can learn to output robot actions directly as text tokens, with no architectural changes and no custom action heads. This "actions-as-text" setup has a lot of practical advantages:
-No architecture changes. We don't need special action heads or a custom vocabulary.
-Training is stable and fast. Inputs and targets stay in the same domain the model was pretrained on (tokens), and we can reuse mature VLM training stacks.
-One model for reasoning + control. The same backbone can describe what it sees, plan in language, and output actions.
-The software ecosystem is great. Debugging, logging, evaluation, and serving infrastructure is much more developed for VLMs than for many robotics-specific policies.
+- No architecture changes. We don't need special action heads or a custom vocabulary.
+- Training is stable and fast. Inputs and targets stay in the same domain the model was pretrained on (tokens), and we can reuse mature VLM training stacks.
+- One model for reasoning + control. The same backbone can describe what it sees, plan in language, and output actions.
+- The software ecosystem is great. Debugging, logging, evaluation, and serving infrastructure is much more developed for VLMs than for many robotics-specific policies.
+
 But we left one big question open: can it actually run fast enough to control a robot in real time? Autoregressive decoding is slow by nature, and in robotics, latency is not just "nice to have" - it directly limits the control rate, the smoothness of motion, and how well the policy can react to changes.
-This post is our attempt to answer that question concretely. We set a measurable target: keep the delay between receiving a camera image and sending an action to the motors below 100 ms, on a 6-DoF arm with a 1-DoF gripper. And we treated it as a systems problem rather than a modeling one - keeping the same VLM backbone and actions-as-text representation throughout.
+
+This post is our attempt to answer that question concretely. We set a measurable target: 
+<div style="
+  background: rgba(59,130,246,0.08);
+  border-left: 6px solid #3b82f6;
+  padding: 16px 20px;
+  margin: 24px 0;
+  border-radius: 8px;
+">
+  Keep the delay between receiving a camera image and sending an action to the motors below 100 ms, on a 6-DoF arm with a 1-DoF gripper.
+</div>
+ And we treated it as a systems problem rather than a modeling one - keeping the same VLM backbone and actions-as-text representation throughout.
+
 Two changes got us close. 
-Streaming actions out of the model as they are generated, rather than waiting for a full chunk to be decoded before the robot moves.
-Adding an EAGLE-style speculative decoder to make each individual generation step cheaper. Together, they bring latency from over 3.5 seconds down to around 100 ms, while keeping LIBERO task performance competitive.
+- Streaming actions out of the model as they are generated, rather than waiting for a full chunk to be decoded before the robot moves.
+- Adding an EAGLE-style speculative decoder to make each individual generation step cheaper. Together, they bring latency from over 3.5 seconds down to around 100 ms, while keeping LIBERO task performance competitive.
+
 The takeaway is that the bottleneck was never the actions-as-text idea itself. It was how inference was scheduled and executed. Fix those, and real-time VLM-based robot control starts to look practical.
 
 # Baseline: Blocking Autoregressive VLA Control
