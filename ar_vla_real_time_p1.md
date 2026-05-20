@@ -146,19 +146,52 @@ In our implementation, the system is split into two parallel loops:
 </div>
 
 The action buffer is the only communication point between the two loops. The inference loop continuously produces actions and pushes them into the buffer. The control loop runs at the desired control frequency, for example 10 Hz, and consumes one action at a time.
+
 This does not make the model itself faster. The total compute required to generate the full chunk is unchanged. However, it changes what the robot is waiting for. In the blocking baseline, the robot waits for the whole chunk. With parallel inference and control, the robot only needs to wait for the first executable action.
+
 For a chunk of H actions, this can be a large improvement. In our setup, the chunk contains 8 actions, so overlapping inference and control can reduce the initial waiting time by roughly the chunk size, assuming actions are generated at a similar rate.
+
 There is one important trade-off. All actions in the chunk are still generated from the observation used at the start of decoding. This means that later actions are based on slightly older visual information. However, this is already a common trade-off in action-chunking and trajectory-following systems. As long as the chunk horizon is short and the control loop keeps receiving new observations frequently, the system can remain responsive while avoiding large idle gaps.
+
 The key point is that this optimisation is almost free. It does not require changing the model, retraining the policy, or modifying the action representation. It only changes the runtime scheduling.
 
 ## Results
 
 With the blocking autoregressive baseline, we measured:
-Time to generate full action sequence: 3625 ms
-Time to generate first action:        489 ms
-Time to generate later actions:       448 ms
+
+<div style="margin: 24px 0; overflow-x: auto;">
+  <table style="width: 100%; border-collapse: separate; border-spacing: 0; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);">
+    <thead>
+      <tr style="background: #f8fafc;">
+        <th style="text-align: left; padding: 14px 16px; color: #334155; font-size: 0.88rem; font-weight: 700; border-bottom: 1px solid #e2e8f0;">Measurement</th>
+        <th style="text-align: right; padding: 14px 16px; color: #334155; font-size: 0.88rem; font-weight: 700; border-bottom: 1px solid #e2e8f0;">Latency</th>
+        <th style="text-align: left; padding: 14px 16px; color: #334155; font-size: 0.88rem; font-weight: 700; border-bottom: 1px solid #e2e8f0;">What it means for control</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td style="padding: 16px; border-bottom: 1px solid #eef2f7; color: #0f172a; font-weight: 650;">Full action chunk</td>
+        <td style="padding: 16px; border-bottom: 1px solid #eef2f7; text-align: right;"><span style="display: inline-block; min-width: 86px; padding: 6px 10px; border-radius: 999px; background: #fee2e2; color: #991b1b; font-weight: 750;">3625 ms</span></td>
+        <td style="padding: 16px; border-bottom: 1px solid #eef2f7; color: #475569;">Robot waits for the entire autoregressive sequence before moving.</td>
+      </tr>
+      <tr>
+        <td style="padding: 16px; border-bottom: 1px solid #eef2f7; color: #0f172a; font-weight: 650;">First executable action</td>
+        <td style="padding: 16px; border-bottom: 1px solid #eef2f7; text-align: right;"><span style="display: inline-block; min-width: 86px; padding: 6px 10px; border-radius: 999px; background: #dbeafe; color: #1e40af; font-weight: 750;">489 ms</span></td>
+        <td style="padding: 16px; border-bottom: 1px solid #eef2f7; color: #475569;">Streaming lets control begin as soon as this action is decoded.</td>
+      </tr>
+      <tr>
+        <td style="padding: 16px; color: #0f172a; font-weight: 650;">Later actions</td>
+        <td style="padding: 16px; text-align: right;"><span style="display: inline-block; min-width: 86px; padding: 6px 10px; border-radius: 999px; background: #dcfce7; color: #166534; font-weight: 750;">448 ms</span></td>
+        <td style="padding: 16px; color: #475569;">Each subsequent action can be consumed by the control loop as it arrives.</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
 By starting execution as soon as the first action is available, the robot no longer needs to wait for the full 3625 ms sequence generation. The effective image-to-first-action delay becomes approximately 489 ms.
+
 This is still far from our target of less than 100 ms, so parallel inference and control alone is not enough for real-time control. However, it gives a large improvement without any loss in model quality or any change to the policy itself.
+
 It also composes naturally with later optimisations. If we can reduce the time to generate one action, the benefit of streaming execution remains: the robot still avoids waiting for the full chunk, and each generated action can be executed as soon as it is ready. In other words, this scheduling change turns future decoding speedups directly into lower control latency.
 
 # Speculative Decoding
@@ -166,24 +199,48 @@ It also composes naturally with later optimisations. If we can reduce the time t
 ## Method
 
 After overlapping inference and control, the robot no longer waits for the full action chunk. However, it still waits for the model to generate the next action. In the baseline, this is still too slow: generating the first action takes around 489 ms, while our target is below 100 ms.
+
 The next question is therefore:
-Can we reduce the cost of autoregressive decoding itself?
+
+<div style="
+  background: rgba(59,130,246,0.08);
+  border-left: 6px solid #3b82f6;
+  padding: 16px 20px;
+  margin: 24px 0;
+  border-radius: 8px;
+">
+  Can we reduce the cost of autoregressive decoding itself?
+</div>
+
 The fundamental bottleneck is that autoregressive models generate one token per forward pass. Each pass runs the full network, attention over the entire context, all layers, all parameters just to produce a single token. For a large VLM, this is expensive, and there is no way around it within standard autoregressive decoding.
+
 Several techniques exist to reduce this cost. The most direct approaches: quantization, pruning, and optimized attention kernels make each forward pass cheaper. But they still generate one token per pass. Speculative decoding takes a different angle: instead of making each step cheaper, it makes each step produce more tokens. It has become a standard component of modern inference stacks, and recent models such as DeepSeek-V3 ship with speculative heads trained into the model from the start.
+
 We focus on speculative decoding because it is lossless in the standard setting and composes well with other optimizations. The core idea is simple: instead of asking the large target model to generate one token at a time, we add a smaller and cheaper draft model that proposes several future tokens, and let the target model verify them in a single pass.
+
 The standard speculative decoding loop is:
-Use the draft model to propose several candidate tokens.
-Run the target model once on the full candidate sequence.
-Accept the longest prefix that matches what the target model would have generated.
-If a token is rejected, resample at that position from the target model's distribution.
-Repeat until generation is complete.
+
+<div class="algorithm-box">
+  <div class="algorithm-title">Algorithm 3: Standard speculative decoding</div>
+  <p class="algorithm-note">Repeat until generation is complete:</p>
+  <ol>
+    <li>Use the draft model to propose several candidate tokens.</li>
+    <li>Run the target model once on the full candidate sequence.</li>
+    <li>Accept the longest prefix that matches what the target model would have generated.</li>
+    <li>If a token is rejected, resample at that position from the target model's distribution.</li>
+  </ol>
+</div>
+
 The benefit comes from accepting more than one token per expensive target-model step. If the draft model proposes 5 tokens and 4 are accepted, we effectively generate 4 tokens for the cost of one verification pass plus a cheap draft step. The key metric is the acceptance rate: the higher it is, the closer we get to the theoretical maximum speedup.
+
 Speculative decoding is particularly interesting for robot control. In natural language, tokens are highly context-dependent, the right next word depends heavily on everything that came before. Robot action sequences have a different structure. Consecutive actions within a chunk are related, but the individual dimensions within a single action (joint angles, gripper state) are largely independent of each other given the overall motion context. Our hypothesis is that this structure makes action tokens easier for a small draft model to predict accurately, which should translate into higher acceptance rates and larger speedups than are typically seen in open-ended text generation.
 
 ## EAGLE-3
 
-Here is a very brief intro into the EAGLE-3 model. For more details look at the original paper: https://arxiv.org/pdf/2503.01840.
+EAGLE-3 is a speculative decoding method built on top of the original EAGLE framework. For full details see the original paper: https://arxiv.org/pdf/2503.01840.
+
 Standard speculative decoding uses a separate smaller LLM as the draft model, which operates independently of the target model. EAGLE-3 improves on this by giving the draft model access to internal features from the target model — specifically, a fusion of low-, mid-, and high-level hidden states — projected through a small FC layer. This richer signal makes the draft model's predictions much more accurate than a standalone smaller model could achieve, which translates directly into higher acceptance rates and larger speedups.
+
 The other key innovation is training-time test: during training, the draft model's own outputs are fed back as inputs, simulating exactly what happens during multi-step drafting at inference time. This prevents error accumulation when the draft model runs for several steps without target-model corrections between them. It also removes the need for a feature prediction loss, freeing the draft model to focus entirely on token prediction and allowing it to scale more effectively with additional training data.
 
 
@@ -192,57 +249,114 @@ In practice, EAGLE-3 achieves up to 6.5× speedup over vanilla autoregressive de
 ## Our modifications
 
 Our implementation differs from the standard EAGLE-3 setup in two important ways.
-First, we train the base policy and the draft module together. Because of this, we compute the loss on the target action tokens, not on reproducing the base model’s own predictions. The reason is simple: we ultimately care about generating correct actions, not about imitating the current base model. 
-Also DeepSeek-V3 authors claim that multi-token prediction loss densifies the training signal and enable the model to pre-plan its representation for better prediction of future tokens (https://arxiv.org/html/2412.19437v1#S2). 
+
+First, we train the base policy and the draft module together. Because of this, we compute the loss on the target action tokens, not on reproducing the base model’s own predictions. The reason is simple: we ultimately care about generating correct actions, not about imitating the current base model. Also DeepSeek-V3 authors claim that multi-token prediction loss densifies the training signal and enable the model to pre-plan its representation for better prediction of future tokens (https://arxiv.org/html/2412.19437v1#S2). 
+
 Second, in this experiment we evaluate a version without verification. In normal text generation, verification is important because a wrong token becomes part of the generated prefix and can permanently change the rest of the sentence. In robot control, the situation is a bit different. A slightly imperfect action is not necessarily catastrophic: the robot receives new observations, the policy runs again, and future actions can correct small errors. But we still evaluate performance of the base model to see a difference in downstream tasks performance.
+
 The total training loss combines the base model's next-token prediction loss with the draft heads' multi-token prediction losses:
-L=LVLM+∑k=1KLMTP(k)L=LVLM​+k=1∑K​LMTP(k)​
-where LVLMLVLM​ is the mean cross-entropy loss over action tokens for the base model, KK is the number of draft heads (5 in our setup), and LMTP(k)LMTP(k)​ is the cross-entropy loss of the kk-th draft head predicting the token kk steps ahead. All losses are masked to action tokens only — image tokens and task description tokens do not contribute to the gradient.
+
+\\[
+L = L_{\mathrm{VLM}} + \sum_{k=1}^{K} L_{\mathrm{MTP}}^{(k)}
+\\]
+
+where \\(L_{\mathrm{VLM}}\\) is the mean cross-entropy loss over action tokens for the base model, \\(K\\) is the number of draft heads (5 in our setup), and \\(L_{\mathrm{MTP}}^{(k)}\\) is the cross-entropy loss of the \\(k\\)-th draft head predicting the token \\(k\\) steps ahead. All losses are masked to action tokens only — image tokens and task description tokens do not contribute to the gradient.
 
 This version should therefore be read as an approximation to speculative decoding, not as a complete replacement for verified EAGLE-3 inference, therefore we will call it EAGLE-style. In the next step, when using an inference engine with built-in speculative decoding support, verification can be added back.
 
 ## Results
 
 We trained the target model and draft model jointly, with gradients flowing through both. All VLM components: vision encoder, connector, and language backbone were unfrozen, as we found this consistently improves task performance. Joint training is motivated by DeepSeek-V3's finding that multi-token prediction loss densifies the gradient signal and encourages the model to build representations that are better suited for predicting future tokens.
+
 The draft model is a single Transformer decoder layer with the same hidden dimension as the target model, augmented with the multi-layer feature fusion head described above. It was trained to predict 5 tokens ahead. Both the target and draft models are trained with cross-entropy loss, summed together into a single objective.
 Training ran for 100k steps on the LIBERO dataset with batch size 192, learning rate 5e-5, across 8 H100 GPUs with DDP.
 
 ### Latency results
 We measured latency on an H100 GPU (https://resources.nvidia.com/en-us-gpu-resources/h100-datasheet-24306).
-Baseline autoregressive decoding:
-Time to generate first action:        489 ms
-Time to generate later actions:       448 ms
-EAGLE-style draft model with 5 heads, without verification:
-Time to generate first action:        154 ms
-Time to generate later actions:       106 ms
+
+<div style="margin: 24px 0; overflow-x: auto;">
+  <table style="width: 100%; border-collapse: separate; border-spacing: 0; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);">
+    <thead>
+      <tr style="background: #f8fafc;">
+        <th style="text-align: left; padding: 14px 16px; color: #334155; font-size: 0.88rem; font-weight: 700; border-bottom: 1px solid #e2e8f0;">Decoder</th>
+        <th style="text-align: right; padding: 14px 16px; color: #334155; font-size: 0.88rem; font-weight: 700; border-bottom: 1px solid #e2e8f0;">First action</th>
+        <th style="text-align: right; padding: 14px 16px; color: #334155; font-size: 0.88rem; font-weight: 700; border-bottom: 1px solid #e2e8f0;">Later actions</th>
+        <th style="text-align: left; padding: 14px 16px; color: #334155; font-size: 0.88rem; font-weight: 700; border-bottom: 1px solid #e2e8f0;">Control implication</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td style="padding: 16px; border-bottom: 1px solid #eef2f7; color: #0f172a; font-weight: 650;">Autoregressive baseline</td>
+        <td style="padding: 16px; border-bottom: 1px solid #eef2f7; text-align: right;"><span style="display: inline-block; min-width: 86px; padding: 6px 10px; border-radius: 999px; background: #fee2e2; color: #991b1b; font-weight: 750;">489 ms</span></td>
+        <td style="padding: 16px; border-bottom: 1px solid #eef2f7; text-align: right;"><span style="display: inline-block; min-width: 86px; padding: 6px 10px; border-radius: 999px; background: #fee2e2; color: #991b1b; font-weight: 750;">448 ms</span></td>
+        <td style="padding: 16px; border-bottom: 1px solid #eef2f7; color: #475569;">Still too slow for the 100 ms control target.</td>
+      </tr>
+      <tr>
+        <td style="padding: 16px; color: #0f172a; font-weight: 650;">EAGLE-style, 5 heads, unverified</td>
+        <td style="padding: 16px; text-align: right;"><span style="display: inline-block; min-width: 86px; padding: 6px 10px; border-radius: 999px; background: #dbeafe; color: #1e40af; font-weight: 750;">154 ms</span></td>
+        <td style="padding: 16px; text-align: right;"><span style="display: inline-block; min-width: 86px; padding: 6px 10px; border-radius: 999px; background: #dcfce7; color: #166534; font-weight: 750;">106 ms</span></td>
+        <td style="padding: 16px; color: #475569;">Much closer to real-time control, especially after the first observation.</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
 This is a large improvement. With a new observation, latency drops from 489 ms to 154 ms. When reusing the same observation context, it drops from 448 ms to 106 ms.
 That is still slightly above the 100 ms target, but it is much closer. More importantly, this result composes with the previous scheduling change. Parallel inference and control makes the robot wait only for the next action, and speculative decoding makes that next action much cheaper to generate.
 
 ### Task performance
 
 The main risk of skipping verification is that speed comes at the cost of policy quality. To check this, we evaluated all variants on two LIBERO benchmarks.
-Model
-LIBERO-Goal
-LIBERO-Long
-Autoregressive baseline
-91.6
-88.2
-Baseline + temporal ensembling
-95.6
-91.2
-EAGLE-style (unverified)
-94.8
-88.4
-Target model only
-93.2
-88.8
+
+<div style="margin: 24px 0; overflow-x: auto;">
+  <table style="width: 100%; border-collapse: separate; border-spacing: 0; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);">
+    <thead>
+      <tr style="background: #f8fafc;">
+        <th style="text-align: left; padding: 14px 16px; color: #334155; font-size: 0.88rem; font-weight: 700; border-bottom: 1px solid #e2e8f0;">Model</th>
+        <th style="text-align: right; padding: 14px 16px; color: #334155; font-size: 0.88rem; font-weight: 700; border-bottom: 1px solid #e2e8f0;">LIBERO-Goal</th>
+        <th style="text-align: right; padding: 14px 16px; color: #334155; font-size: 0.88rem; font-weight: 700; border-bottom: 1px solid #e2e8f0;">LIBERO-Long</th>
+        <th style="text-align: left; padding: 14px 16px; color: #334155; font-size: 0.88rem; font-weight: 700; border-bottom: 1px solid #e2e8f0;">Takeaway</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td style="padding: 16px; border-bottom: 1px solid #eef2f7; color: #0f172a; font-weight: 650;">Autoregressive baseline</td>
+        <td style="padding: 16px; border-bottom: 1px solid #eef2f7; text-align: right;"><span style="display: inline-block; min-width: 64px; padding: 6px 10px; border-radius: 999px; background: #f1f5f9; color: #334155; font-weight: 750;">91.6</span></td>
+        <td style="padding: 16px; border-bottom: 1px solid #eef2f7; text-align: right;"><span style="display: inline-block; min-width: 64px; padding: 6px 10px; border-radius: 999px; background: #f1f5f9; color: #334155; font-weight: 750;">88.2</span></td>
+        <td style="padding: 16px; border-bottom: 1px solid #eef2f7; color: #475569;">Plain policy quality reference.</td>
+      </tr>
+      <tr>
+        <td style="padding: 16px; border-bottom: 1px solid #eef2f7; color: #0f172a; font-weight: 650;">Baseline + temporal ensembling</td>
+        <td style="padding: 16px; border-bottom: 1px solid #eef2f7; text-align: right;"><span style="display: inline-block; min-width: 64px; padding: 6px 10px; border-radius: 999px; background: #dcfce7; color: #166534; font-weight: 750;">95.6</span></td>
+        <td style="padding: 16px; border-bottom: 1px solid #eef2f7; text-align: right;"><span style="display: inline-block; min-width: 64px; padding: 6px 10px; border-radius: 999px; background: #dcfce7; color: #166534; font-weight: 750;">91.2</span></td>
+        <td style="padding: 16px; border-bottom: 1px solid #eef2f7; color: #475569;">Strong quality reference, but more expensive at runtime.</td>
+      </tr>
+      <tr>
+        <td style="padding: 16px; border-bottom: 1px solid #eef2f7; color: #0f172a; font-weight: 650;">EAGLE-style, unverified</td>
+        <td style="padding: 16px; border-bottom: 1px solid #eef2f7; text-align: right;"><span style="display: inline-block; min-width: 64px; padding: 6px 10px; border-radius: 999px; background: #dbeafe; color: #1e40af; font-weight: 750;">94.8</span></td>
+        <td style="padding: 16px; border-bottom: 1px solid #eef2f7; text-align: right;"><span style="display: inline-block; min-width: 64px; padding: 6px 10px; border-radius: 999px; background: #dbeafe; color: #1e40af; font-weight: 750;">88.4</span></td>
+        <td style="padding: 16px; border-bottom: 1px solid #eef2f7; color: #475569;">Large latency win with competitive task performance.</td>
+      </tr>
+      <tr>
+        <td style="padding: 16px; color: #0f172a; font-weight: 650;">Target model only</td>
+        <td style="padding: 16px; text-align: right;"><span style="display: inline-block; min-width: 64px; padding: 6px 10px; border-radius: 999px; background: #fef3c7; color: #92400e; font-weight: 750;">93.2</span></td>
+        <td style="padding: 16px; text-align: right;"><span style="display: inline-block; min-width: 64px; padding: 6px 10px; border-radius: 999px; background: #fef3c7; color: #92400e; font-weight: 750;">88.8</span></td>
+        <td style="padding: 16px; color: #475569;">Shows the jointly trained base remains strong without draft heads.</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
 
 The results are encouraging on both counts. First, the unverified EAGLE-style model is competitive across the board, on LIBERO-Goal it actually outperforms the plain baseline and approaches the temporal-ensembling reference, while on LIBERO-Long it stays within the same range. Second, and perhaps more tellingly, there is essentially no gap between the EAGLE-style model and the target model alone. This supports the intuition that small action errors are not catastrophic in closed-loop control: the robot receives a new observation at every step, and the policy can correct minor deviations before they compound.
+
 Also worth noting is that the jointly trained model, optimised with multi-token prediction loss, outperforms the plain autoregressive baseline even when evaluated without the draft heads. This is consistent with DeepSeek-V3's finding that predicting multiple future tokens encourages the model to build more forward-looking representations, which appears to transfer to downstream task performance. Whether the same effect carries over to diffusion-based action heads is an open question.
 
 # Conclusion and Discussion
 
 We started with a question that sounds like a modeling problem — can an autoregressive VLM control a robot in real time? — but it turned out to be a systems problem. The actions-as-text representation was never the bottleneck. The bottleneck was how inference was scheduled and executed. Once we treated the model output as an action stream rather than a completed text sequence, and added a speculative draft model to reduce per-token cost, latency dropped from over 3.5 seconds to around 100 ms without changing the policy or retraining from scratch.
+
 This reframing has a practical consequence worth emphasising. VLM inference is a heavily optimised field: better kernels, KV-cache management, batching strategies, and speculative decoding are all active areas of engineering with mature tooling. A robotics policy built on a standard VLM backbone gets to inherit all of that, essentially for free. A custom architecture with a specialised action head does not. As inference stacks continue to improve, an actions-as-text policy should get faster without any additional work on the robotics side.
+
 The other finding we find interesting is how closed-loop control changes the cost of being wrong. In text generation, a single bad token corrupts the context and can derail everything that follows. In robot control, the loop closes at every timestep: the robot observes the world again, the policy reruns, and small errors can be absorbed before they compound. This is why unverified speculative decoding — which would be considered an approximation in language generation — stays competitive on task performance here. It also raises a broader question about where that tolerance breaks down. Faster, more dynamic tasks, longer horizons, or situations where a single bad action is irreversible may require verification after all. Understanding exactly where the boundary lies is an open question.
+
 What comes next is mostly engineering. The remaining gap to 100 ms is small, and adding a proper inference engine — with optimised decoding kernels and KV-cache handling — should close it. Beyond latency, the more interesting open questions are whether the multi-token prediction benefit generalises beyond LIBERO, and whether the same approximate-inference argument holds on a real robot where errors have physical consequences.
