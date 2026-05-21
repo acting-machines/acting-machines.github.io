@@ -4,5 +4,7 @@ remote_theme: pages-themes/cayman
 plugins:
   - jekyll-remote-theme
 markdown: kramdown
+include:
+  - _assets
 github:
   is_project_page: false

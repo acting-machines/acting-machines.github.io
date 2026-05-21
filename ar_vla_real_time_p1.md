@@ -238,6 +238,13 @@ EAGLE-3 is a speculative decoding method built on top of the original EAGLE fram
 
 Standard speculative decoding uses a separate smaller LLM as the draft model, which operates independently of the target model. EAGLE-3 improves on this by giving the draft model access to internal features from the target model — specifically, a fusion of low-, mid-, and high-level hidden states — projected through a small FC layer. This richer signal makes the draft model's predictions much more accurate than a standalone smaller model could achieve, which translates directly into higher acceptance rates and larger speedups.
 
+<div style="margin: 28px 0;">
+  <img src="{{ '/_assets/eagle_inference.png' | relative_url }}" style="display: block; width: min(50%, 720px); height: auto; margin: 0 auto;">
+  <p style="text-align: center; font-size: 0.9rem; color: #667; margin-top: 10px;"><em>Figure 2: EAGLE-3 inference, from [3]. The target model exposes hidden states from several depths, these states are fused by a small projection layer, and the resulting features condition a lightweight draft decoder that proposes multiple future tokens before target-model verification.</em></p>
+</div>
+
+The figure shows the EAGLE-3 draft path used during inference. The target model produces the usual next-token distribution, but it also supplies low-, middle-, and high-level representations for the current prefix. These representations are concatenated and projected into draft features, which the small decoder reuses across several speculative steps. Each step extends the tentative sequence, so the target model can later verify several candidate tokens with one expensive pass instead of generating them one at a time.
+
 The other key innovation is training-time test: during training, the draft model's own outputs are fed back as inputs, simulating exactly what happens during multi-step drafting at inference time. This prevents error accumulation when the draft model runs for several steps without target-model corrections between them. It also removes the need for a feature prediction loss, freeing the draft model to focus entirely on token prediction and allowing it to scale more effectively with additional training data.
 
 
@@ -257,7 +264,9 @@ The total training loss combines the base model's next-token prediction loss wit
 L = L_{\mathrm{VLM}} + \sum_{k=1}^{K} L_{\mathrm{MTP}}^{(k)}
 \\]
 
-where \\(L_{\mathrm{VLM}}\\) is the mean cross-entropy loss over action tokens for the base model, \\(K\\) is the number of draft heads (5 in our setup), and \\(L_{\mathrm{MTP}}^{(k)}\\) is the cross-entropy loss of the \\(k\\)-th draft head predicting the token \\(k\\) steps ahead. All losses are masked to action tokens only — image tokens and task description tokens do not contribute to the gradient.
+where \\(L_{\mathrm{VLM}}\\) is the mean cross-entropy loss over action tokens for the base model, \\(K\\) is the number of draft heads (5 in our setup), and \\(L_{\mathrm{MTP}}^{(k)}\\) is the cross-entropy loss of the \\(k\\)-th draft head predicting tokens \\(k\\) steps ahead. All losses are masked to action tokens only — image tokens and task description tokens do not contribute to the gradient.
+
+
 
 This version should therefore be read as an approximation to speculative decoding, not as a complete replacement for verified EAGLE-3 inference, therefore we will call it EAGLE-style. In the next step, when using an inference engine with built-in speculative decoding support, verification can be added back.
 
