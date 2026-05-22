@@ -1,7 +1,7 @@
 ---
 layout: default
 title: Can an Autoregressive VLM Control a Robot in Real Time? (Part 1)
-description: lalala
+hide_description: true
 
 citation_title: "Can an Autoregressive VLM Control a Robot in Real Time? (Part 1)"
 citation_authors: 
