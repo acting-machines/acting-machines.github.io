@@ -1,13 +1,20 @@
 ---
 layout: default
 title: Can an Autoregressive VLM Control a Robot in Real Time? (Part 1)
+description: lalala
 
 citation_title: "Can an Autoregressive VLM Control a Robot in Real Time? (Part 1)"
 citation_authors: 
   - "Oleg Balakhnov"
   - "Sergei Skvortsov"
-citation_date: "2026/05/20"
+citation_date: "2026/05/22"
 math: true
+
+header_links:
+  - text: View on GitHub
+    url: https://github.com/acting-machines/lerobot/tree/dev
+  - text: Model weights
+    url: https://huggingface.co/olegbalakhnov/vla-0-smol-spec
 
 ---
 
