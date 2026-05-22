@@ -53,7 +53,7 @@ The takeaway is that the bottleneck was never the actions-as-text idea itself. I
 
 Our baseline policy follows the VLA-0-Smol setup: a standard vision–language model is fine-tuned to output robot actions as ordinary text tokens. Instead of adding a continuous action head or a robotics-specific decoder, we express each action as a short sequence of discrete numbers in the model’s text vocabulary. The policy is therefore trained exactly like a language model: given an image, task description, and robot state, predict the next action token.
 
-The target model is based on **SmolVLM2**, a compact vision–language model with an image encoder and an autoregressive language-model decoder. During training, the camera observation is inserted into the prompt as image tokens, while the task, robot state, and action prefix are represented as text. The target output is a sequence of action tokens corresponding to the next robot command, or to a short chunk of future commands.
+The target model is based on [SmolVLM2](https://huggingface.co/HuggingFaceTB/SmolVLM2-500M-Video-Instruct) [[7]](https://huggingface.co/HuggingFaceTB), a compact vision–language model with an image encoder and an autoregressive language-model decoder. During training, the camera observation is inserted into the prompt as image tokens, while the task, robot state, and action prefix are represented as text. The target output is a sequence of action tokens corresponding to the next robot command, or to a short chunk of future commands.
 
 The sequence looks like this:
 
@@ -360,13 +360,13 @@ Also worth noting is that the jointly trained model, optimised with multi-token 
 
 # Conclusion and Discussion
 
-We started with a question that sounds like a modeling problem — can an autoregressive VLM control a robot in real time? — but it turned out to be a systems problem. The actions-as-text representation was never the bottleneck. The bottleneck was how inference was scheduled and executed. Once we treated the model output as an action stream rather than a completed text sequence, and added a speculative draft model to reduce per-token cost, latency dropped from over 3.5 seconds to around 100 ms without changing the policy or retraining from scratch.
+We started with a question that sounds like a modeling problem: can an autoregressive VLM control a robot in real time? It turned out to be a systems problem. The actions-as-text representation was never the bottleneck. The bottleneck was how inference was scheduled and executed. Once we treated the model output as an action stream rather than a completed text sequence, and added a speculative draft model to reduce per-token cost, latency dropped from over 3.5 seconds to around 100 ms without changing the policy or retraining from scratch.
 
 This reframing has a practical consequence worth emphasising. VLM inference is a heavily optimised field: better kernels, KV-cache management, batching strategies, and speculative decoding are all active areas of engineering with mature tooling. A robotics policy built on a standard VLM backbone gets to inherit all of that, essentially for free. A custom architecture with a specialised action head does not. As inference stacks continue to improve, an actions-as-text policy should get faster without any additional work on the robotics side.
 
-The other finding we find interesting is how closed-loop control changes the cost of being wrong. In text generation, a single bad token corrupts the context and can derail everything that follows. In robot control, the loop closes at every timestep: the robot observes the world again, the policy reruns, and small errors can be absorbed before they compound. This is why unverified speculative decoding — which would be considered an approximation in language generation — stays competitive on task performance here. It also raises a broader question about where that tolerance breaks down. Faster, more dynamic tasks, longer horizons, or situations where a single bad action is irreversible may require verification after all. Understanding exactly where the boundary lies is an open question.
+The other finding we find interesting is how closed-loop control changes the cost of being wrong. In text generation, a single bad token corrupts the context and can derail everything that follows. In robot control, the loop closes at every timestep: the robot observes the world again, the policy reruns, and small errors can be absorbed before they compound. This may explain why unverified speculative decoding, which would normally be treated as an approximation in language generation, remains competitive in terms of task performance in robotics. It also raises a broader question about where that tolerance breaks down. Faster, more dynamic tasks, longer horizons, or situations where a single bad action is irreversible may require verification after all. Understanding exactly where the boundary lies is an open question.
 
-What comes next is mostly engineering. The remaining gap to 100 ms is small, and adding a proper inference engine — with optimised decoding kernels and KV-cache handling — should close it. Beyond latency, the more interesting open questions are whether the multi-token prediction benefit generalises beyond LIBERO, and whether the same approximate-inference argument holds on a real robot where errors have physical consequences.
+What comes next is mostly engineering. The remaining gap to 100 ms is small, and adding a proper inference engine with optimised decoding kernels and KV-cache handling should close it. Beyond latency, the more interesting open questions are whether the multi-token prediction benefit generalises beyond LIBERO, and whether the same approximate-inference argument holds on a real robot where errors have physical consequences.
 
 # References
 
@@ -387,3 +387,6 @@ What comes next is mostly engineering. The remaining gap to 100 ms is small, and
 
 6. NVIDIA. (2024). *H100 Tensor Core GPU Datasheet*.  
    https://resources.nvidia.com/en-us-gpu-resources/h100-datasheet-24306
+
+7. Hugging FaceTB. (2025). *SmolVLM: Redefining small and efficient multimodal models*  
+   https://arxiv.org/abs/2504.05299
