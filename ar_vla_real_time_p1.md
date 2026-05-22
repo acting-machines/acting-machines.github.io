@@ -76,10 +76,10 @@ The sequence looks like this:
 <p style="text-align: center; font-size: 0.9rem; color: #667; margin-top: 10px;"><em>Figure 1: The multimodal input sequence formatted for the SmolVLM2 chat template.</em></p>
 
 The important detail for this post is that the action sequence is generated autoregressively. The model does not predict the full action sequence in one forward pass. Instead, it predicts one token, appends it to the context, predicts the next token, and repeats this process until the whole action chunk has been produced.
-The naïve control loop therefore looks like this:
+The naive control loop therefore looks like this:
 
 <div class="algorithm-box">
-  <div class="algorithm-title">Algorithm 1: Naïve autoregressive VLA control loop</div>
+  <div class="algorithm-title">Algorithm 1: Naive autoregressive VLA control loop</div>
   <p class="algorithm-note">Repeat while the robot is running:</p>
   <ol>
     <li>Receive a new camera observation and the current robot state.</li>
@@ -106,10 +106,10 @@ With this blocking implementation, latency is far above our target.
   margin: 24px 0;
   border-radius: 8px;
 ">
-  Generating a full action sequence of 8 actions for a 7-DoF robot takes 3625 ms, while our target is to keep the delay between receiving a camera image and sending an action to the motors below 100 ms. 
+  Generating a full action sequence of 8 actions for a 7-DoF robot takes 3.6 s, while our target is to keep the delay between receiving a camera image and sending an action to the motors below 100 ms. 
 </div>
 
-The policy itself is strong, but the naïve execution loop is too slow by more than an order of magnitude.
+The policy itself is strong, but the naive execution loop is too slow by more than an order of magnitude.
 
 This gives us a clean systems problem: keep the same target VLA policy and the same actions-as-text representation, but change how inference is scheduled and accelerated. The next sections describe two steps in that direction: first, overlapping inference with robot control, and second, using speculative decoding to reduce the cost of autoregressive generation.
 
@@ -160,7 +160,7 @@ For a chunk of H actions, this can be a large improvement. In our setup, the chu
 
 There is one important trade-off. All actions in the chunk are still generated from the observation used at the start of decoding. This means that later actions are based on slightly older visual information. However, this is already a common trade-off in action-chunking and trajectory-following systems. As long as the chunk horizon is short and the control loop keeps receiving new observations frequently, the system can remain responsive while avoiding large idle gaps.
 
-The key point is that this optimisation is almost free. It does not require changing the model, retraining the policy, or modifying the action representation. It only changes the runtime scheduling.
+The key point is that this optimization is almost free. It does not require changing the model, retraining the policy, or modifying the action representation. It only changes the runtime scheduling.
 
 ## Results
 
@@ -196,7 +196,7 @@ By starting execution as soon as the first action is available, the robot no lon
 
 This is still far from our target of less than 100 ms, so parallel inference and control alone is not enough for real-time control. However, it gives a large improvement without any loss in model quality or any change to the policy itself.
 
-It also composes naturally with later optimisations. If we can reduce the time to generate one action, the benefit of streaming execution remains: the robot still avoids waiting for the full chunk, and each generated action can be executed as soon as it is ready. In other words, this scheduling change turns future decoding speedups directly into lower control latency.
+It also composes naturally with later optimizations. If we can reduce the time to generate one action, the benefit of streaming execution remains: the robot still avoids waiting for the full chunk, and each generated action can be executed as soon as it is ready. In other words, this scheduling change turns future decoding speedups directly into lower control latency.
 
 # Speculative Decoding
 
@@ -221,6 +221,11 @@ The fundamental bottleneck is that autoregressive models generate one token per 
 Several techniques exist to reduce this cost. The most direct approaches: quantization, pruning, and optimized attention kernels make each forward pass cheaper. But they still generate one token per pass. Speculative decoding takes a different angle: instead of making each step cheaper, it makes each step produce more tokens. It has become a common acceleration technique for LLM inference [[4]](https://arxiv.org/abs/2211.17192). Recent models such as DeepSeek-V3 use multi-token prediction during training [[2]](https://arxiv.org/abs/2412.19437).
 
 We focus on speculative decoding because it is lossless in the standard setting and composes well with other optimizations. The core idea is simple: instead of asking the large target model to generate one token at a time, we add a smaller and cheaper draft model that proposes several future tokens, and let the target model verify them in a single pass.
+
+<div style="margin: 28px 0;">
+  <img src="{{ '/_assets/spec_decoding.png' | relative_url }}" alt="Speculative decoding drafts multiple candidate tokens and verifies them in parallel with the target model." style="display: block; width: min(60%, 900px); height: auto; margin: 0 auto;">
+  <p style="text-align: center; font-size: 0.9rem; color: #667; margin-top: 10px;"><em>Figure 2: Speculative decoding overview, from [8]. Autoregressive decoding emits tokens sequentially, while speculative decoding cheaply drafts several candidates and verifies them in parallel with the target LLM. Tokens after the first mismatch are discarded to preserve generation quality.</em></p>
+</div>
 
 The standard speculative decoding loop is:
 
@@ -247,7 +252,7 @@ Standard speculative decoding uses a separate smaller LLM as the draft model, wh
 
 <div style="margin: 28px 0;">
   <img src="{{ '/_assets/eagle_inference.png' | relative_url }}" style="display: block; width: min(50%, 720px); height: auto; margin: 0 auto;">
-  <p style="text-align: center; font-size: 0.9rem; color: #667; margin-top: 10px;"><em>Figure 2: EAGLE-3 inference, from [3]. The target model exposes hidden states from several depths, these states are fused by a small projection layer, and the resulting features condition a lightweight draft decoder that proposes multiple future tokens before target-model verification.</em></p>
+  <p style="text-align: center; font-size: 0.9rem; color: #667; margin-top: 10px;"><em>Figure 3: EAGLE-3 inference, from [3]. The target model exposes hidden states from several depths, these states are fused by a small projection layer, and the resulting features condition a lightweight draft decoder that proposes multiple future tokens before target-model verification.</em></p>
 </div>
 
 The figure shows the EAGLE-3 draft path used during inference. The target model produces the usual next-token distribution, but it also supplies low-, middle-, and high-level representations for the current prefix. These representations are concatenated and projected into draft features, which the small decoder reuses across several speculative steps. Each step extends the tentative sequence, so the target model can later verify several candidate tokens with one expensive pass instead of generating them one at a time.
@@ -347,17 +352,17 @@ The main risk of skipping verification is that speed comes at the cost of policy
 
 The results are encouraging on both counts. First, the unverified EAGLE-style model is competitive across the board, on LIBERO-Goal it actually outperforms the plain baseline and approaches the temporal-ensembling reference, while on LIBERO-Long it stays within the same range. Second, and perhaps more tellingly, there is essentially no gap between the EAGLE-style model and the target model alone. This supports the intuition that small action errors are not catastrophic in closed-loop control: the robot receives a new observation at every step, and the policy can correct minor deviations before they compound.
 
-Also worth noting is that the jointly trained model, optimised with multi-token prediction loss, outperforms the plain autoregressive baseline even when evaluated without the draft heads. This is consistent with DeepSeek-V3's finding that predicting multiple future tokens encourages the model to build more forward-looking representations, which appears to transfer to downstream task performance. Whether the same effect carries over to diffusion-based action heads is an open question.
+Also worth noting is that the jointly trained model, optimized with multi-token prediction loss, outperforms the plain autoregressive baseline even when evaluated without the draft heads. This is consistent with DeepSeek-V3's finding that predicting multiple future tokens encourages the model to build more forward-looking representations, which appears to transfer to downstream task performance. Whether the same effect carries over to diffusion-based action heads is an open question.
 
 # Conclusion and Discussion
 
 We started with a question that sounds like a modeling problem: can an autoregressive VLM control a robot in real time? It turned out to be a systems problem. The actions-as-text representation was never the bottleneck. The bottleneck was how inference was scheduled and executed. Once we treated the model output as an action stream rather than a completed text sequence, and added a speculative draft model to reduce per-token cost, latency dropped from over 3.5 seconds to around 100 ms without changing the policy or retraining from scratch.
 
-This reframing has a practical consequence worth emphasising. VLM inference is a heavily optimised field: better kernels, KV-cache management, batching strategies, and speculative decoding are all active areas of engineering with mature tooling. A robotics policy built on a standard VLM backbone gets to inherit all of that, essentially for free. A custom architecture with a specialised action head does not. As inference stacks continue to improve, an actions-as-text policy should get faster without any additional work on the robotics side.
+This reframing has a practical consequence worth emphasising. VLM inference is a heavily optimized field: better kernels, KV-cache management, batching strategies, and speculative decoding are all active areas of engineering with mature tooling. A robotics policy built on a standard VLM backbone gets to inherit all of that, essentially for free. A custom architecture with a specialised action head does not. As inference stacks continue to improve, an actions-as-text policy should get faster without any additional work on the robotics side.
 
 The other finding we find interesting is how closed-loop control changes the cost of being wrong. In text generation, a single bad token corrupts the context and can derail everything that follows. In robot control, the loop closes at every timestep: the robot observes the world again, the policy reruns, and small errors can be absorbed before they compound. This may explain why unverified speculative decoding, which would normally be treated as an approximation in language generation, remains competitive in terms of task performance in robotics. It also raises a broader question about where that tolerance breaks down. Faster, more dynamic tasks, longer horizons, or situations where a single bad action is irreversible may require verification after all. Understanding exactly where the boundary lies is an open question.
 
-What comes next is mostly engineering. The remaining gap to 100 ms is small, and adding a proper inference engine with optimised decoding kernels and KV-cache handling should close it. Beyond latency, the more interesting open questions are whether the multi-token prediction benefit generalises beyond LIBERO, and whether the same approximate-inference argument holds on a real robot where errors have physical consequences.
+What comes next is mostly engineering. The remaining gap to 100 ms is small, and adding a proper inference engine with optimized decoding kernels and KV-cache handling should close it. Beyond latency, the more interesting open questions are whether the multi-token prediction benefit generalises beyond LIBERO, and whether the same approximate-inference argument holds on a real robot where errors have physical consequences.
 
 # References
 
@@ -381,3 +386,6 @@ What comes next is mostly engineering. The remaining gap to 100 ms is small, and
 
 7. Hugging FaceTB. (2025). *SmolVLM: Redefining small and efficient multimodal models*  
    https://arxiv.org/abs/2504.05299
+
+8. Xia, H., Yang, Z., Dong, Q., Wang, P., Li, Y., Ge, T., Liu, T., Li, W., & Sui, Z. (2024). *Unlocking Efficiency in Large Language Model Inference: A Comprehensive Survey of Speculative Decoding*. arXiv:2401.07851v2.  
+   https://arxiv.org/abs/2401.07851v2
