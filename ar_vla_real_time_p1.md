@@ -263,28 +263,19 @@ Our implementation differs from the standard EAGLE-3 setup in two important ways
 
 First, we train the base policy and the draft module together. Because of this, we compute the loss on the target action tokens, not on reproducing the base model’s own predictions. The reason is simple: we ultimately care about generating correct actions, not about imitating the current base model. Also DeepSeek-V3 authors claim that multi-token prediction loss densifies the training signal and enable the model to pre-plan its representation for better prediction of future tokens [[2]](https://arxiv.org/abs/2412.19437).
 
-Second, in this experiment we evaluate a version without verification. In normal text generation, verification is important because a wrong token becomes part of the generated prefix and can permanently change the rest of the sentence. In robot control, the situation is a bit different. A slightly imperfect action is not necessarily catastrophic: the robot receives new observations, the policy runs again, and future actions can correct small errors. But we still evaluate performance of the base model to see a difference in downstream tasks performance.
-
 The total training loss combines the base model's next-token prediction loss with the draft heads' multi-token prediction losses:
 
 \\[
 L = L_{\mathrm{VLM}} + \sum_{k=1}^{K} L_{\mathrm{MTP}}^{(k)}
 \\]
 
-where \\(L_{\mathrm{VLM}}\\) is the mean cross-entropy loss over action tokens for the base model, \\(K\\) is the number of draft heads (5 in our setup), and \\(L_{\mathrm{MTP}}^{(k)}\\) is the cross-entropy loss of the \\(k\\)-th draft head predicting tokens \\(k\\) steps ahead. All losses are masked to action tokens only — image tokens and task description tokens do not contribute to the gradient.
+where \\(L_{\mathrm{VLM}}\\) is the mean cross-entropy loss over action tokens for the base model, \\(K\\) is the number of draft heads (5 in our setup), and \\(L_{\mathrm{MTP}}^{(k)}\\) is the cross-entropy loss of the \\(k\\)-th draft head predicting tokens \\(k\\) steps ahead. All losses are masked to action tokens only, image tokens and task description tokens do not contribute to the gradient.
 
+Second, in this experiment we evaluate a version without verification. In normal text generation, verification is important because a wrong token becomes part of the generated prefix and can permanently change the rest of the sentence. In robot control, the situation is a bit different. A slightly imperfect action is not necessarily catastrophic: the robot receives new observations, the policy runs again, and future actions can correct small errors. But we still evaluate performance of the base model to see a difference in downstream tasks performance.
 
+The draft model is a single Transformer decoder layer with the same hidden dimension as the target model, augmented with the multi-layer feature fusion head described above, trained to predict 5 tokens ahead. All VLM components: vision encoder, connector, and language backbone were unfrozen during training, as we found this consistently improves task performance. Training ran for 100k steps on the LIBERO dataset with batch size 192, learning rate 5e-5, across 8 H100 GPUs with DDP. We refer to this configuration as EAGLE-style throughout.
 
-This version should therefore be read as an approximation to speculative decoding, not as a complete replacement for verified EAGLE-3 inference, therefore we will call it EAGLE-style. In the next step, when using an inference engine with built-in speculative decoding support, verification can be added back.
-
-## Results
-
-We trained the target model and draft model jointly, with gradients flowing through both. All VLM components: vision encoder, connector, and language backbone were unfrozen, as we found this consistently improves task performance. Joint training is motivated by DeepSeek-V3's finding that multi-token prediction loss densifies the gradient signal and encourages the model to build representations that are better suited for predicting future tokens.
-
-The draft model is a single Transformer decoder layer with the same hidden dimension as the target model, augmented with the multi-layer feature fusion head described above. It was trained to predict 5 tokens ahead. Both the target and draft models are trained with cross-entropy loss, summed together into a single objective.
-Training ran for 100k steps on the LIBERO dataset with batch size 192, learning rate 5e-5, across 8 H100 GPUs with DDP.
-
-### Latency results
+## Latency results
 We measured latency on an H100 GPU [[6]](https://resources.nvidia.com/en-us-gpu-resources/h100-datasheet-24306).
 
 <div style="margin: 24px 0; overflow-x: auto;">
@@ -315,7 +306,7 @@ We measured latency on an H100 GPU [[6]](https://resources.nvidia.com/en-us-gpu-
 This is a large improvement. With a new observation, latency drops from 489 ms to 154 ms. When reusing the same observation context, it drops from 448 ms to 106 ms.
 That is still slightly above the 100 ms target, but it is much closer. More importantly, this result composes with the previous scheduling change. Parallel inference and control makes the robot wait only for the next action, and speculative decoding makes that next action much cheaper to generate.
 
-### Task performance
+## Task performance
 
 The main risk of skipping verification is that speed comes at the cost of policy quality. To check this, we evaluated all variants on two LIBERO benchmarks.
 
