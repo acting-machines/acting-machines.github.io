@@ -45,7 +45,9 @@ And we treated it as a systems problem rather than a modeling one - keeping the 
 
 Two changes got us close. 
 - Streaming actions out of the model as they are generated, rather than waiting for a full chunk to be decoded before the robot moves.
-- Adding an EAGLE-style speculative decoder to make each individual generation step cheaper. Together, they bring latency from over 3.5 seconds down to around 100 ms, while keeping LIBERO task performance competitive [[5]](https://arxiv.org/abs/2306.03310).
+- Adding an EAGLE-style speculative decoder to make each individual generation step cheaper. 
+
+Together, they bring latency from over 3.5 seconds down to around 100 ms, while keeping LIBERO task performance competitive [[5]](https://arxiv.org/abs/2306.03310).
 
 The takeaway is that the bottleneck was never the actions-as-text idea itself. It was how inference was scheduled and executed. Fix those, and real-time VLM-based robot control starts to look practical.
 
@@ -53,7 +55,7 @@ The takeaway is that the bottleneck was never the actions-as-text idea itself. I
 
 Our baseline policy follows the VLA-0-Smol setup: a standard vision–language model is fine-tuned to output robot actions as ordinary text tokens. Instead of adding a continuous action head or a robotics-specific decoder, we express each action as a short sequence of discrete numbers in the model’s text vocabulary. The policy is therefore trained exactly like a language model: given an image, task description, and robot state, predict the next action token.
 
-The target model is based on [SmolVLM2](https://huggingface.co/HuggingFaceTB/SmolVLM2-500M-Video-Instruct) [[7]](https://huggingface.co/HuggingFaceTB), a compact vision–language model with an image encoder and an autoregressive language-model decoder. During training, the camera observation is inserted into the prompt as image tokens, while the task, robot state, and action prefix are represented as text. The target output is a sequence of action tokens corresponding to the next robot command, or to a short chunk of future commands.
+The target model is based on [SmolVLM2](https://huggingface.co/HuggingFaceTB/SmolVLM2-500M-Video-Instruct) [[7]](https://huggingface.co/HuggingFaceTB), a compact vision–language model with an image encoder and an autoregressive language-model decoder. During training, the camera observation is inserted into the prompt as image tokens, while the task, robot state, and action prefix are represented as text. The target output is a sequence of action tokens corresponding to a short chunk of future commands.
 
 The sequence looks like this:
 
@@ -91,9 +93,7 @@ The naive control loop therefore looks like this:
   </ol>
 </div>
 
-This is the simplest way to run an autoregressive VLA policy, but it is also the most blocking one. The robot does not start moving until the full chunk has been decoded. If generation takes hundreds of milliseconds, the robot simply waits during that time. This creates visible pauses and makes the policy unsuitable for high-frequency control.
-
-This problem becomes worse when we predict action chunks. Chunking is useful because it lets the policy generate several future actions from one observation, which can make behaviour smoother and more stable. But in an autoregressive text-token setup, predicting a longer chunk also means generating more tokens sequentially. For example, if one action contains several discretised values and we predict multiple future actions, the model may need many decoding steps before the robot receives anything.
+This is the simplest way to run an autoregressive VLA policy, but it is also the most blocking one. The robot does not start moving until the full chunk has been decoded. Chunking is useful because it lets the policy generate several future actions from one observation, which can make behaviour smoother and more stable. But in an autoregressive text-token setup, predicting a longer chunk also means generating more tokens sequentially. If generation takes hundreds of milliseconds, the robot simply waits during that time. This creates visible pauses and makes the policy unsuitable for high-frequency control.
 
 In the previous VLA-0-Smol work, we also used temporal ensembling, which improved task performance. However, temporal ensembling is expensive in this setting because it requires repeatedly predicting overlapping future trajectories. Since the focus of this post is real-time control, we do not use temporal ensembling in the main runtime setup. We still report it as a reference point in the results, but our main baseline is the plain autoregressive policy without temporal ensembling.
 
@@ -137,8 +137,12 @@ In our implementation, the system is split into two parallel loops:
       <ol>
         <li>Observe the camera image and current robot state.</li>
         <li>Run the VLM prefill.</li>
-        <li>Generate actions autoregressively until the EOS token is produced.</li>
-        <li>Push each generated action into the action buffer.</li>
+        <li>Until the EOS token is produced:
+          <ol>
+            <li>Generate the next action autoregressively.</li>
+            <li>Push the action into the action buffer.</li>
+          </ol>
+        </li>
       </ol>
     </div>
     <div>
@@ -366,7 +370,7 @@ What comes next is mostly engineering. The remaining gap to 100 ms is small, and
 
 # References
 
-1. Balakhnov, O., & Skvortsov, S. (2025). *VLA-0-Smol*.  
+1. Balakhnov, O., Skvortsov, S., Zarin G. (2025). *VLA-0-Smol*.  
    https://robot-learning-collective.github.io/vla-0-smol/
 
 2. DeepSeek-AI. (2024). *DeepSeek-V3 Technical Report*. arXiv:2412.19437.  
