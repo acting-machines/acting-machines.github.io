@@ -358,7 +358,7 @@ The results are encouraging on both counts. First, the unverified EAGLE-style mo
 
 Also worth noting is that the jointly trained model, optimized with multi-token prediction loss, outperforms the plain autoregressive baseline even when evaluated without the draft heads. This is consistent with DeepSeek-V3's finding that predicting multiple future tokens encourages the model to build more forward-looking representations, which appears to transfer to downstream task performance. Whether the same effect carries over to diffusion-based action heads is an open question.
 
-# Conclusion and Discussion
+# Conclusion and Discussion 
 
 We started with a question that sounds like a modeling problem: can an autoregressive VLM control a robot in real time? It turned out to be a systems problem. The actions-as-text representation was never the bottleneck. The bottleneck was how inference was scheduled and executed. Once we treated the model output as an action stream rather than a completed text sequence, and added a speculative draft model to reduce per-token cost, latency dropped from over 3.5 seconds to around 100 ms without changing the policy or retraining from scratch.
 
