@@ -422,3 +422,22 @@ We would like to thank [Nebius](https://nebius.com) for providing the GPU resour
 
 8. Xia, H., Yang, Z., Dong, Q., Wang, P., Li, Y., Ge, T., Liu, T., Li, W., & Sui, Z. (2024). *Unlocking Efficiency in Large Language Model Inference: A Comprehensive Survey of Speculative Decoding*. arXiv:2401.07851v2.  
    https://arxiv.org/abs/2401.07851v2
+
+# Citation 
+
+Please cite as:
+
+```txt
+Balakhnov & Skvortsov, "Can an Autoregressive VLM Control a Robot in Real Time? (Part 1)", Acting Machines blog, 2026.
+```
+
+BibTeX citation:
+```txt
+@online{balakhnov2026ar_vla_real_time_p1,
+  title={Can an Autoregressive VLM Control a Robot in Real Time? (Part 1)},
+  author={Balakhnov, Oleg and Skvortsov, Sergei},
+  year={2026},
+  organization = {Acting Machines blog},
+  url= {https://acting-machines.github.io/ar_vla_real_time_p1.html}
+}
+```
