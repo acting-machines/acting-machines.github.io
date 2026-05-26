@@ -368,6 +368,35 @@ The other finding we find interesting is how closed-loop control changes the cos
 
 What comes next is mostly engineering. The remaining gap to 100 ms is small, and adding a proper inference engine with optimized decoding kernels and KV-cache handling should close it. Beyond latency, the more interesting open questions are whether the multi-token prediction benefit generalises beyond LIBERO, and whether the same approximate-inference argument holds on a real robot where errors have physical consequences.
 
+
+# Acknowledgments
+<a href="https://nebius.com/" target="_blank">
+  <img src="_assets/nebius.webp" alt="Nebius Logo" style="height: 32px; width: auto; margin: 10px 0;">
+</a>
+
+We would like to thank [Nebius](https://nebius.com) for providing the GPU resources that made this research possible.
+
+# Team
+
+<style>
+.team-grid { display: flex; justify-content: center; gap: 3rem; flex-wrap: wrap; margin: 2rem 0; }
+.team-member { text-align: center; }
+.team-member img { width: 120px; height: 120px; border-radius: 50%; object-fit: cover; border: 3px solid #ddd; }
+.team-member p { margin-top: 0.75rem; font-weight: 500; color: #333; }
+</style>
+
+<div class="team-grid">
+  <div class="team-member">
+    <img src="_assets/oleg.jpg" alt="Oleg Balakhnov">
+    <p><a href="https://www.linkedin.com/in/oleg-balakhnov-a591a1233/">Oleg Balakhnov</a></p>
+  </div>
+  <div class="team-member">
+    <img src="_assets/sergey.jpeg" alt="Sergei Skvortsov">
+    <p><a href="https://www.linkedin.com/in/sergei-skvortsov/">Sergei Skvortsov</a></p>
+  </div>
+</div>
+
+
 # References
 
 1. Balakhnov, O., Skvortsov, S., Zarin G. (2025). *VLA-0-Smol*.  
